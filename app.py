@@ -44,25 +44,35 @@ def get_video(url: str):
     }
 
 @app.get("/moviereviews_reviews/")
-def search_movie_reviews(url: str):
+def get_youtube_reviews(url: str):
+    # Extract video ID from the URL
+    video_id = get_video_id_from_url(url)
+    
+    if not video_id:
+        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+
     youtube = build("youtube", "v3", developerKey=API_KEY)
-    video_id = url.split("v=")[1]
+
+    # Get video details using the video ID
     video_response = youtube.videos().list(
         part="snippet",
         id=video_id
     ).execute()
 
-    movie_title = video_response['items'][0]['snippet']['title']
+    # Extract video information
+    video_info = video_response.get("items", [])
+    if not video_info:
+        raise HTTPException(status_code=404, detail="Video not found")
 
-    omdb_url = f"http://www.omdbapi.com/?apikey={OMDB_API_KEY}&t={movie_title}&plot=full"
-    omdb_response = requests.get(omdb_url).json()
+    title = video_info[0]["snippet"]["title"]
+    description = video_info[0]["snippet"]["description"]
+    video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    if 'Error' in omdb_response:
-        return {"error": "Movie not found on OMDB"}
-
-    reviews = omdb_response.get('Ratings', [])
-
-    return {"url": url, "movie_title": movie_title, "reviews": reviews}
+    return {
+        "title": title,
+        "description": description,
+        "video_url": video_url
+    }
 
 @app.get("/retrieve_description")
 def retrieve_full_description(url: str):
