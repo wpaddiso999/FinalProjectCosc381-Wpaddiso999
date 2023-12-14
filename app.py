@@ -1,10 +1,14 @@
 from fastapi import FastAPI
 from googleapiclient.discovery import build
 from pprint import pprint
+import requests
+from google.cloud import translate
 
 app = FastAPI()
-
+TARGET_LANGUAGE = "zh"  # Chinese
 API_KEY = "AIzaSyB9lomWP02z3mjqFrnwXz1F3hrj7J8SJGE"
+OMDB_API_KEY = "your_omdb_api_key"  # Replace with your OMDB API key
+PROJECT_ID = "your_project_id"  # Replace with your Google Cloud project ID
 
 @app.get("/")
 def hello_world():
@@ -23,19 +27,13 @@ def get_video(url: str):
     description = video_response['items'][0]['snippet']['description']
     category_id = video_response['items'][0]['snippet']['categoryId']
     view_count = video_response['items'][0]['statistics']['viewCount']
-    print("title -", title)
-    print("Description -", description)
-    print("Category ID - ", category_id)
-    print("View Count -", view_count)
 
     category_response = youtube.videoCategories().list(
         part="snippet",
         id=category_id,
     ).execute()
 
-    pprint(category_response)
     category = category_response['items'][0]['snippet']['title']
-    print(category)
 
     return {
         "url": url,
@@ -45,13 +43,26 @@ def get_video(url: str):
         "category": category,
     }
 
-@app.get("/search_reviews")
+@app.get("/moviereviews_reviews/")
 def search_movie_reviews(url: str):
-    # Implement the method to search for movie reviews based on the YouTube URL
-    # You can use external libraries or APIs to perform this task
+    youtube = build("youtube", "v3", developerKey=API_KEY)
+    video_id = url.split("v=")[1]
+    video_response = youtube.videos().list(
+        part="snippet",
+        id=video_id
+    ).execute()
 
-    # Placeholder response for now
-    return {"message": "Searching for movie reviews..."}
+    movie_title = video_response['items'][0]['snippet']['title']
+
+    omdb_url = f"http://www.omdbapi.com/?apikey={OMDB_API_KEY}&t={movie_title}&plot=full"
+    omdb_response = requests.get(omdb_url).json()
+
+    if 'Error' in omdb_response:
+        return {"error": "Movie not found on OMDB"}
+
+    reviews = omdb_response.get('Ratings', [])
+
+    return {"url": url, "movie_title": movie_title, "reviews": reviews}
 
 @app.get("/retrieve_description")
 def retrieve_full_description(url: str):
@@ -68,11 +79,34 @@ def retrieve_full_description(url: str):
 
 @app.get("/review_in_chinese")
 def review_in_chinese(url: str):
-    # Implement the method to review the video and provide description in Chinese
-    # You can use translation APIs to perform this task
+    youtube = build("youtube", "v3", developerKey=API_KEY)
+    video_id = url.split("v=")[1]
+    video_response = youtube.videos().list(
+        part="snippet",
+        id=video_id
+    ).execute()
 
-    # Placeholder response for now
-    return {"message": "Reviewing in Chinese..."}
+    description = video_response['items'][0]['snippet']['description']
+
+    # Translate the description to Chinese using Google Cloud Translation API
+    translated_description = translate_text(description, TARGET_LANGUAGE)
+
+    return {"url": url, "original_description": description, "translated_description": translated_description}
+
+def translate_text(text, target_language):
+    client = translate.TranslationServiceClient()
+    parent = f"projects/{PROJECT_ID}/locations/global"
+
+    response = client.translate_text(
+        request={
+            "parent": parent,
+            "contents": [text],
+            "target_language_code": target_language,
+        }
+    )
+
+    translated_text = response.translations[0].translated_text
+    return translated_text
 
 if __name__ == "__main__":
     import uvicorn
