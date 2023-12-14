@@ -43,80 +43,96 @@ def get_video(url: str):
         "category": category,
     }
 
+def youtube_search(query, max_results=10):
+    youtube = build("youtube", "v3", developerKey=API_KEY)
+    search_response = youtube.search().list(
+        q=query,
+        type="video",
+        part="id",
+        maxResults=max_results
+    ).execute()
+
+    video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
+    return video_ids
+
 @app.get("/moviereviews_reviews/")
-def get_youtube_reviews(url: str):
-    # Extract video ID from the URL
-    video_id = get_video_id_from_url(url)
+def get_youtube_reviews(movie_name: str):
+    # Search for videos related to the movie
+    video_ids = youtube_search(movie_name)
     
-    if not video_id:
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL")
+    if not video_ids:
+        raise HTTPException(status_code=404, detail=f"No videos found for the movie: {movie_name}")
 
     youtube = build("youtube", "v3", developerKey=API_KEY)
 
-    # Get video details using the video ID
-    video_response = youtube.videos().list(
-        part="snippet",
-        id=video_id
-    ).execute()
+    reviews = []
+    for video_id in video_ids:
+        video_response = youtube.videos().list(
+            part="snippet",
+            id=video_id
+        ).execute()
 
-    # Extract video information
-    video_info = video_response.get("items", [])
-    if not video_info:
-        raise HTTPException(status_code=404, detail="Video not found")
+        video_info = video_response.get("items", [])
+        if not video_info:
+            continue
 
-    title = video_info[0]["snippet"]["title"]
-    description = video_info[0]["snippet"]["description"]
-    video_url = f"https://www.youtube.com/watch?v={video_id}"
+        title = video_info[0]["snippet"]["title"]
+        description = video_info[0]["snippet"]["description"]
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-    return {
-        "title": title,
-        "description": description,
-        "video_url": video_url
-    }
+        reviews.append({
+            "title": title,
+            "description": description,
+            "video_url": video_url
+        })
 
-@app.get("/retrieve_description")
-def retrieve_full_description(url: str):
+    return {"movie_name": movie_name, "reviews": reviews}
+
+def youtube_search(query, max_results=10):
     youtube = build("youtube", "v3", developerKey=API_KEY)
-    video_id = url.split("v=")[1]
-    video_response = youtube.videos().list(
-        part="snippet",
-        id=video_id
+    search_response = youtube.search().list(
+        q=query,
+        type="video",
+        part="id",
+        maxResults=max_results,
+        relevanceLanguage="zh"  # Set the language to Chinese
     ).execute()
 
-    description = video_response['items'][0]['snippet']['description']
+    video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
+    return video_ids
 
-    return {"url": url, "full_description": description}
+@app.get("/reviews_in_chinese/")
+def reviews_in_chinese(movie_name: str):
+    # Search for videos related to the movie in Chinese
+    video_ids = youtube_search(movie_name)
 
-@app.get("/review_in_chinese")
-def review_in_chinese(url: str):
+    if not video_ids:
+        raise HTTPException(status_code=404, detail=f"No videos found for the movie: {movie_name}")
+
     youtube = build("youtube", "v3", developerKey=API_KEY)
-    video_id = url.split("v=")[1]
-    video_response = youtube.videos().list(
-        part="snippet",
-        id=video_id
-    ).execute()
 
-    description = video_response['items'][0]['snippet']['description']
+    reviews = []
+    for video_id in video_ids:
+        video_response = youtube.videos().list(
+            part="snippet",
+            id=video_id
+        ).execute()
 
-    # Translate the description to Chinese using Google Cloud Translation API
-    translated_description = translate_text(description, TARGET_LANGUAGE)
+        video_info = video_response.get("items", [])
+        if not video_info:
+            continue
 
-    return {"url": url, "original_description": description, "translated_description": translated_description}
+        title = video_info[0]["snippet"]["title"]
+        description = video_info[0]["snippet"]["description"]
+        video_url = f"https://www.youtube.com/watch?v={video_id}"
 
-def translate_text(text, target_language):
-    client = translate.TranslationServiceClient()
-    parent = f"projects/{PROJECT_ID}/locations/global"
+        reviews.append({
+            "title": title,
+            "description": description,
+            "video_url": video_url
+        })
 
-    response = client.translate_text(
-        request={
-            "parent": parent,
-            "contents": [text],
-            "target_language_code": target_language,
-        }
-    )
-
-    translated_text = response.translations[0].translated_text
-    return translated_text
+    return {"movie_name": movie_name, "reviews": reviews}
 
 if __name__ == "__main__":
     import uvicorn
