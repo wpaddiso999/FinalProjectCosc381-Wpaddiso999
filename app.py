@@ -103,6 +103,13 @@ def youtube_search(query, max_results=10):
 
 @app.get("/reviews_in_chinese/")
 def reviews_in_chinese(movie_name: str):
+    """
+    For issue 4, you need to:
+    1) search for the movie name, and
+    2) specify the target language for translation
+
+    Searches for reviews in that target language
+    """
     # Search for videos related to the movie in Chinese
     video_ids = youtube_search(movie_name)
 
