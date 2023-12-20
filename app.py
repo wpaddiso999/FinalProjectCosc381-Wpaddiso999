@@ -108,7 +108,10 @@ def reviews_in_chinese(movie_name: str):
     1) search for the movie name, and
     2) specify the target language for translation
 
-    Searches for reviews in that target language
+    Searches for reviews in that target language.
+    Steps:
+    1) translate the movie name into the target language
+    2) search the movie reviews using that translated movie name
     """
     # Search for videos related to the movie in Chinese
     video_ids = youtube_search(movie_name)
